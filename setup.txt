@@ -1,0 +1,102 @@
+# 1. Install the required background decryption tools
+sudo apt update && sudo apt install p7zip-full -y
+
+# 2. Write the clean family automation script
+cat << 'EOF' > ~/vault.sh
+#!/bin/bash
+clear
+
+DRIVE_DIR="/mnt/chromeos/GoogleDrive/MyDrive/Vault"
+LOCAL_WORKSPACE="$HOME/Vault_Workspace"
+ZIP_NAME="confidential.zip"
+
+if [ ! -d "$DRIVE_DIR" ]; then
+    echo "========================================="
+    echo "             FAMILY VAULT                "
+    echo "========================================="
+    echo "[ERROR] Cannot find your Google Drive 'Vault' folder."
+    echo "Please right-click the 'Vault' folder in your Files app and 'Share with Linux'."
+    echo "========================================="
+    exit 1
+fi
+
+if [ ! -f "$DRIVE_DIR/$ZIP_NAME" ]; then
+    echo "========================================="
+    echo "             FAMILY VAULT                "
+    echo "========================================="
+    echo "[ERROR] Secure file 'confidential.zip' not found inside your Vault folder."
+    echo "========================================="
+    exit 1
+fi
+
+echo "========================================="
+echo "             FAMILY VAULT                "
+echo "========================================="
+echo "Opening your vault... please enter the family password below."
+echo "========================================="
+echo ""
+
+rm -rf "$LOCAL_WORKSPACE" && mkdir -p "$LOCAL_WORKSPACE"
+cp "$DRIVE_DIR/$ZIP_NAME" ~/temp_incoming.zip
+
+if 7z x ~/temp_incoming.zip -o"$LOCAL_WORKSPACE" > /dev/null 2>&1; then
+    rm -f ~/temp_incoming.zip
+    
+    clear
+    echo "========================================="
+    echo "          VAULT IS NOW OPEN!             "
+    echo "========================================="
+    echo "1. Open your Files app -> Linux files -> Vault_Workspace"
+    echo "2. Add, edit, or delete your files normally."
+    echo "========================================="
+    echo ""
+    read -p "Press [ENTER] here when you are completely finished to lock and save: " run_close
+    echo ""
+    
+    clear
+    echo "========================================="
+    echo "            LOCKING VAULT                "
+    echo "========================================="
+    echo "Locking your vault... please re-enter the family password to secure changes."
+    echo "========================================="
+    echo ""
+    
+    rm -f ~/temp_outgoing.zip
+    cd "$LOCAL_WORKSPACE" && 7z a -tzip -p -mem=AES256 ~/temp_outgoing.zip . > /dev/null 2>&1
+    
+    echo "Saving updates to Google Drive..."
+    cp ~/temp_outgoing.zip "$DRIVE_DIR/$ZIP_NAME"
+    rm -r "$LOCAL_WORKSPACE" ~/temp_outgoing.zip
+    
+    clear
+    echo "========================================="
+    echo "         VAULT CLOSED SUCCESSFULLY       "
+    echo "========================================="
+    echo "Your changes are encrypted and synced to the cloud."
+    echo "========================================="
+else
+    clear
+    rm -f ~/temp_incoming.zip
+    rm -rf "$LOCAL_WORKSPACE"
+    echo "========================================="
+    echo "         ACCESS DENIED: WRONG PASSWORD   "
+    echo "========================================="
+    echo "The password entered was incorrect."
+    echo "The vault remains safely locked."
+    echo "========================================="
+    exit 1
+fi
+EOF
+
+# 3. Apply operational permissions and create the quick 'vault' shortcut command
+chmod +x ~/vault.sh
+alias vault="~/vault.sh"
+grep -qxF 'alias vault="~/vault.sh"' ~/.bashrc || echo 'alias vault="~/vault.sh"' >> ~/.bashrc
+
+clear
+echo "========================================="
+echo "        INSTALLATION COMPLETE!           "
+echo "========================================="
+echo "Setup is successful. To use your vault from now on,"
+echo "just open this terminal and type: vault"
+echo "========================================="
