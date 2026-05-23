@@ -6,97 +6,83 @@ cat << 'EOF' > ~/vault.sh
 #!/bin/bash
 clear
 
-DRIVE_DIR="/mnt/chromeos/GoogleDrive/MyDrive/Vault"
+# Configuration
+DRIVE_DIR="/mnt/chromeos/GoogleDrive/MyDrive"
 LOCAL_WORKSPACE="$HOME/Vault_Workspace"
-ZIP_NAME="confidential.zip"
+# Updated to .zip extension
+ZIP_NAME="Passports, Certificates, Licenses.zip"
 
+# 1. Permission Check
 if [ ! -d "$DRIVE_DIR" ]; then
     echo "========================================="
-    echo "             FAMILY VAULT                "
+    echo "            DRIVE NOT SHARED             "
     echo "========================================="
-    echo "[ERROR] Cannot find your Google Drive 'Vault' folder."
-    echo "Please right-click the 'Vault' folder in your Files app and 'Share with Linux'."
+    echo "[ERROR] Linux cannot see your Google Drive."
+    echo "Action: Right-click 'My Drive' in Files app -> 'Share with Linux'"
     echo "========================================="
     exit 1
 fi
 
+# 2. Setup Mode (If the zip doesn't exist yet)
 if [ ! -f "$DRIVE_DIR/$ZIP_NAME" ]; then
-    echo "========================================="
-    echo "             FAMILY VAULT                "
-    echo "========================================="
-    echo "[ERROR] Secure file 'confidential.zip' not found inside your Vault folder."
-    echo "========================================="
-    exit 1
+    echo "--- INITIAL VAULT SETUP ---"
+    echo "Target not found: $ZIP_NAME"
+    read -p "Create this vault now from files in Vault_Workspace? (y/n): " setup_choice
+    
+    if [[ "$setup_choice" =~ ^([yY])$ ]]; then
+        mkdir -p "$LOCAL_WORKSPACE"
+        echo "-----------------------------------------"
+        echo "1. Place your files in: Linux files -> Vault_Workspace"
+        read -p "2. Press [ENTER] when files are ready to be locked..."
+        
+        echo "3. Enter the family password for the new zip:"
+        read -s VAULT_PW
+        echo ""
+        
+        # Create the zip directly in the Drive folder
+        cd "$LOCAL_WORKSPACE" && 7z a -tzip -p"$VAULT_PW" -mem=AES256 ~/temp_vault.zip . > /dev/null 2>&1
+        mv ~/temp_vault.zip "$DRIVE_DIR/$ZIP_NAME"
+        rm -rf "$LOCAL_WORKSPACE"
+        
+        echo "SUCCESS: Vault created in My Drive root."
+        exit 0
+    else
+        echo "Setup cancelled."
+        exit 1
+    fi
 fi
 
+# 3. Normal Operation (Open and Re-lock)
 echo "========================================="
-echo "             FAMILY VAULT                "
+echo "           FAMILY SECURE VAULT           "
 echo "========================================="
-echo "Opening your vault... please enter the family password below."
-echo "========================================="
+echo "Enter password to unlock your documents:"
+read -s VAULT_PW
 echo ""
 
-rm -rf "$LOCAL_WORKSPACE" && mkdir -p "$LOCAL_WORKSPACE"
-cp "$DRIVE_DIR/$ZIP_NAME" ~/temp_incoming.zip
+mkdir -p "$LOCAL_WORKSPACE"
 
-if 7z x ~/temp_incoming.zip -o"$LOCAL_WORKSPACE" > /dev/null 2>&1; then
-    rm -f ~/temp_incoming.zip
-    
+# Extract the zip from Drive into the Linux workspace
+if 7z x "$DRIVE_DIR/$ZIP_NAME" -p"$VAULT_PW" -o"$LOCAL_WORKSPACE" > /dev/null 2>&1; then
     clear
     echo "========================================="
-    echo "          VAULT IS NOW OPEN!             "
+    echo "           VAULT IS NOW OPEN!            "
     echo "========================================="
-    echo "1. Open your Files app -> Linux files -> Vault_Workspace"
-    echo "2. Add, edit, or delete your files normally."
-    echo "========================================="
-    echo ""
-    read -p "Press [ENTER] here when you are completely finished to lock and save: " run_close
-    echo ""
+    echo "Files are in: Linux files -> Vault_Workspace"
+    echo "-----------------------------------------"
+    read -p "Press [ENTER] here to LOCK and SAVE changes: " run_close
     
-    clear
-    echo "========================================="
-    echo "            LOCKING VAULT                "
-    echo "========================================="
-    echo "Locking your vault... please re-enter the family password to secure changes."
-    echo "========================================="
-    echo ""
+    echo "Encrypting and syncing..."
+    cd "$LOCAL_WORKSPACE" && 7z a -tzip -p"$VAULT_PW" -mem=AES256 ~/temp_outgoing.zip . > /dev/null 2>&1
     
-    rm -f ~/temp_outgoing.zip
-    cd "$LOCAL_WORKSPACE" && 7z a -tzip -p -mem=AES256 ~/temp_outgoing.zip . > /dev/null 2>&1
-    
-    echo "Saving updates to Google Drive..."
-    cp ~/temp_outgoing.zip "$DRIVE_DIR/$ZIP_NAME"
-    rm -r "$LOCAL_WORKSPACE" ~/temp_outgoing.zip
-    
-    clear
-    echo "========================================="
-    echo "         VAULT CLOSED SUCCESSFULLY       "
-    echo "========================================="
-    echo "Your changes are encrypted and synced to the cloud."
-    echo "========================================="
-else
-    clear
-    rm -f ~/temp_incoming.zip
+    # Overwrite the old zip in Drive with the new one
+    mv ~/temp_outgoing.zip "$DRIVE_DIR/$ZIP_NAME"
     rm -rf "$LOCAL_WORKSPACE"
-    echo "========================================="
-    echo "         ACCESS DENIED: WRONG PASSWORD   "
-    echo "========================================="
-    echo "The password entered was incorrect."
-    echo "The vault remains safely locked."
-    echo "========================================="
+    
+    clear
+    echo "Vault Locked and Synced to Google Drive."
+else
+    echo "ACCESS DENIED: Wrong password."
+    rm -rf "$LOCAL_WORKSPACE"
     exit 1
 fi
-EOF
-
-# 3. Apply operational permissions and create the quick 'vault' shortcut command
-chmod +x ~/vault.sh
-alias vault="~/vault.sh"
-grep -qxF 'alias vault="~/vault.sh"' ~/.bashrc || echo 'alias vault="~/vault.sh"' >> ~/.bashrc
-
-clear
-echo "========================================="
-echo "        INSTALLATION COMPLETE!           "
-echo "========================================="
-echo "Setup is successful. To use your vault from now on,"
-echo "just open this terminal and type: vault"
-echo "========================================="
